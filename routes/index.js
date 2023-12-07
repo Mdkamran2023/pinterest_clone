@@ -3,6 +3,7 @@ var router = express.Router();
 const userModel = require("./users");
 const postModel = require("./posts");
 const passport = require("passport");
+const upload = require("./multer");
 
 const localStrategy = require("passport-local");
 passport.use(new localStrategy(userModel.authenticate()));
@@ -12,21 +13,42 @@ router.get("/", function (req, res, next) {
   res.render("index");
 });
 
-router.get('/profile',isLoggedIn, async function(req,res,next){
- const user=await userModel.findOne({
-  username:req.session.passport.user //for the user data who is logged in
- })
-//  console.log(user);
-  res.render("profile",{user});
-})
-
-router.get('/login',function(req,res,next){
-  // console.log(req.flash("error")); //error is an array
-  res.render("login",{error:req.flash('error')});
+router.get("/profile", isLoggedIn, async function (req, res, next) {
+  const user = await userModel.findOne({
+    username: req.session.passport.user, //for the user data who is logged in
+  })
+  .populate("posts")
+  //  console.log(user);
+  res.render("profile", {user});
 });
 
-router.get('/feed',function(req,res,next){
+router.get("/login", function (req, res, next) {
+  // console.log(req.flash("error")); //error is an array
+  res.render("login", { error: req.flash("error") });
+});
+
+router.get("/feed", function (req, res, next) {
   res.render("feed");
+});
+
+router.post("/upload", isLoggedIn, upload.single("file"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).send("No files were uploaded.");
+  }
+  // res.send('File uploaded successfully!')
+  const user = await userModel
+  //finding the user who is logged in
+  .findOne({ username: req.session.passport.user })
+  .populate("posts")
+  const post = await postModel.create({
+    image: req.file.filename, //uploaded file name
+    imageText: req.body.filecaption,
+    user: user._id,
+  });
+  user.posts.push(post._id);
+  await user.save();
+  // res.send("done");
+  res.redirect('back');
 });
 // router.get('/alluserposts',async function(req,res,next){
 //  let user= await userModel
@@ -71,7 +93,6 @@ router.post("/register", function (req, res) {
 
   //Registering the new user using Passport's register method
   userModel.register(userData, req.body.password).then(function () {
-
     //Authenticating the user after successful registration
     passport.authenticate("local")(req, res, function () {
       res.redirect("/profile");
@@ -79,26 +100,30 @@ router.post("/register", function (req, res) {
   });
 });
 
-router.post("/login",passport.authenticate("local",{
-  successRedirect:"/profile",
-  failureRedirect:"/login",
-  failureFlash:true //if not logged in then flash will be shown
-}),function(req,res){
-  // res.redirect('/');
-});
+router.post(
+  "/login",
+  passport.authenticate("local", {
+    successRedirect: "/profile",
+    failureRedirect: "/login",
+    failureFlash: true, //if not logged in then flash will be shown
+  }),
+  function (req, res) {
+    // res.redirect('/');
+  }
+);
 
-router.post('/logout', function(req, res, next){
-  req.logout(function(err) {
-    if (err) { return next(err); }
-    res.redirect('/');
+router.post("/logout", function (req, res, next) {
+  req.logout(function (err) {
+    if (err) {
+      return next(err);
+    }
+    res.redirect("/");
   });
 });
 
 
-
-
-function isLoggedIn(req,res,next){
-  if(req.isAuthenticated()) return next();
+function isLoggedIn(req, res, next) {
+  if (req.isAuthenticated()) return next();
   res.redirect("/login");
 }
 
